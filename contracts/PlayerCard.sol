@@ -1,85 +1,91 @@
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.9;
+import "./CardBase.sol";
 import "hardhat/console.sol";
 
-contract CardBase  {
+contract PlayerCard is CardBase {
+    string public constant name = "SquidCards";
+	string public constant symbol = "SQD";
 
-    struct PlayerCard {
-		uint64 creationTime;
+    mapping(uint256 => string) private tokenURIs;
 
-        // address for active player
-		address currentAddress;
+    function tokenURI(uint256 tokenId) public view returns (string memory) {
+        require(_exists(tokenId), "TokenID not found for URI query");
 
-        // number of games won 
-        uint128 currentWinCount;
+        return string(abi.encodePacked(tokenURIs[tokenId]));
+    }
 
-		// address for next player, when current player is no longer active
-		address nextAddress;
+    function requireCardExists(uint256 cardID) public view {
+		require (cardID < totalSupply(), "CardID exceeds supply");
 	}
 
-    PlayerCard[] cards;
+    function totalSupply() public view returns (uint) {
+		return MAX_CARDS - cards.length;
+	}
 
-    uint64 public constant MAX_CARDS = 5000;
+    function balanceOf(address _owner) public view returns (uint256 count) {
+		return ownerToCardCount[_owner];
+	}
 
-    mapping (uint256 => address) public cardIdToOwner;
-	mapping (address => uint256[]) public ownerToCardIds;
+    function transfer(address _to, uint256 _cardId) external {
+		// Prevent transfer to 0x00 address
+		require(_to != address(0), "Transferring to no address");
 
-    mapping (address => uint256) ownerToCardCount;
+		// Prevent transfers to contract
+		require(_to != address(this), "Can't transfer to contract");
 
-    // events
-    event Transfer(address from, address to, uint256 tokenID);
-    event NewCard(address owner, uint256 cardID);
+		// Prevent transfers if card _cardId is not owned by the sender
+		require(_owns(msg.sender, _cardId), "Only owner can transfer");
 
-    function greet() public view returns (string memory) {
-        return "greet";
+		// Reassign ownership and emit transfer event
+		_transfer(msg.sender, _to, _cardId);
+	}
+
+    function createCard() public returns (uint256) {
+		require(msg.sender != address(this), "Can't transfer to contract");
+
+		// Create the card
+		uint256 cardID = _createCard(msg.sender);
+
+		return cardID;
+	}
+
+    function ownerOf(uint256 _tokenId) external view returns (address owner) {
+        console.log("Lookup owner of ID: ", _tokenId);
+		owner = cardIdToOwner[_tokenId];
+        console.log("Found owner: ", owner);
+		require (owner != address(0), "Owner must have valid address");
+        return owner;
+	}
+
+    function _owns(address _claimant, uint256 _cardID) internal view returns (bool) {
+		return cardIdToOwner[_cardID] == _claimant;
+	}
+
+    function _setTokenURI(uint256 tokenId, string memory tokenUri) internal {
+        require(_exists(tokenId), "URI set for nonexistent token ID");
+        tokenURIs[tokenId] = tokenUri;
     }
 
-    function _exists(uint256 tokenId) internal view returns (bool) {
-        return cardIdToOwner[tokenId] != address(0);
-    }
+    // EXPENSIVE: restrict calls to outside of contract
+    function tokensOfOwner(address _owner) external view returns(uint256[] memory ownerTokens) {
+		uint256 tokenCount = balanceOf(_owner);
 
-    function _transfer(address _from, address _to, uint256 _cardID) internal {
-        console.log("Start transfer");
+		if (tokenCount == 0) { // No tokens, return an empty array
+			return new uint256[](0);
+		} else {
+			uint256[] memory result = new uint256[](tokenCount);
+			uint256 totalTokens = totalSupply();
+			uint256 resultIndex = 0;
 
-        ownerToCardCount[_to]++;
-        
-        console.log("Assign ID %d to %s", _cardID, _to);
+			uint256 cardID;
+			for (cardID = 1; cardID <= totalTokens; cardID++) {
+				if (cardIdToOwner[cardID] == _owner) {
+					result[resultIndex] = cardID;
+					resultIndex++;
+				}
+			}
 
-        cardIdToOwner[_cardID] = _to;
-
-        if (_from != address(0)) {
-            ownerToCardCount[_from]--;
-        }
-
-        console.log("Emit transfer");
-        emit Transfer(_from, _to, _cardID);
-    }
-
-    function _createCard(address _owner) internal returns (uint256) {
-        console.log("Create owner address %s", _owner);
-        
-        PlayerCard memory _card = PlayerCard({
-            creationTime: uint64(block.timestamp),
-            currentAddress: _owner,
-            currentWinCount: 0,
-            nextAddress: address(0)
-        });
-
-        cards.push(_card);
-        uint256 newCard = cards.length;
-        console.log("New Card ID: ", newCard);
-
-        require(newCard <= MAX_CARDS, "Exceeds minting capacity");
-
-        emit NewCard(_owner, newCard);
-
-        _transfer(address(0), _owner, newCard);
-        return newCard;
-    }
-
-    function _mint(address to, uint256 tokenId) internal {
-        require(to != address(0), "ERC721: mint to the zero address");
-        require(!_exists(tokenId), "ERC721: token already minted");
-
-        _createCard(to);
-    }
+			return result;
+		}
+	}
 }
