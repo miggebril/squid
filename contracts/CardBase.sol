@@ -1,5 +1,4 @@
 pragma solidity ^0.8.0;
-
 import "hardhat/console.sol";
 
 contract CardBase  {
@@ -30,22 +29,34 @@ contract CardBase  {
     event Transfer(address from, address to, uint256 tokenID);
     event NewCard(address owner, uint256 cardID);
 
+    function greet() public view returns (string memory) {
+        return "greet";
+    }
+
     function _exists(uint256 tokenId) internal view returns (bool) {
         return cardIdToOwner[tokenId] != address(0);
     }
 
     function _transfer(address _from, address _to, uint256 _cardID) internal {
+        console.log("Start transfer");
+
         ownerToCardCount[_to]++;
+        
+        console.log("Assign ID %d to %s", _cardID, _to);
+
         cardIdToOwner[_cardID] = _to;
 
         if (_from != address(0)) {
             ownerToCardCount[_from]--;
         }
 
+        console.log("Emit transfer");
         emit Transfer(_from, _to, _cardID);
     }
 
     function _createCard(address _owner) internal returns (uint256) {
+        console.log("Create owner address %s", _owner);
+        
         PlayerCard memory _card = PlayerCard({
             creationTime: uint64(block.timestamp),
             currentAddress: _owner,
@@ -55,9 +66,9 @@ contract CardBase  {
 
         cards.push(_card);
         uint256 newCard = cards.length;
-        require(newCard <= MAX_CARDS, "Exceeds minting capacity");
+        console.log("New Card ID: ", newCard);
 
-        console.log("New card issued for %s : No. %u", _owner, newCard);
+        require(newCard <= MAX_CARDS, "Exceeds minting capacity");
 
         emit NewCard(_owner, newCard);
 
